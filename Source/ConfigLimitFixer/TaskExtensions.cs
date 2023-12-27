@@ -100,7 +100,7 @@ public static class TaskExtensions
 
                 var index = WaitHandle.WaitAny(handlesToWait);
 
-                return index >= 0
+                return index > 0
                     ? chunk[index - 1]
                     : null;
             })

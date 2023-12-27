@@ -17,6 +17,7 @@ namespace ConfigLimitFixer;
 public sealed class Plugin
 {
     private IPluginLogger Logger { get; }
+    private CancellationTokenSource CancellationTokenSource { get; } = new();
 
     [Init]
     public Plugin(IPALogger logger)
@@ -30,7 +31,7 @@ public sealed class Plugin
             // Starts the new thread for overriding the default save thread.
             this.Logger.Info("Overriding IPA's default SaveThread.");
 
-            this.OverrideSaveThread();
+            this.OverrideSaveThread(this.CancellationTokenSource.Token);
 
             this.Logger.Info("Overridden IPA's default SaveThread.");
         }
@@ -50,14 +51,14 @@ public sealed class Plugin
     [OnExit]
     public void OnApplicationQuit()
     {
-        // Nothing to do here.
         this.Logger.Debug("OnApplicationQuit()");
+        this.CancellationTokenSource.Cancel();
     }
 
     /// <summary>
     /// Overrides the default SaveThread of IPA.
     /// </summary>
-    private void OverrideSaveThread()
+    private void OverrideSaveThread(CancellationToken stoppingToken)
     {
         this.Logger.Info("Overriding IPA's default SaveThread.");
 
@@ -115,7 +116,8 @@ public sealed class Plugin
             this.StartSaveThread(
                 Constants.ReplacedSaveThreadName,
                 configRuntimeType,
-                saveThreadField);
+                saveThreadField,
+                stoppingToken);
         }
         catch
         {
@@ -127,7 +129,8 @@ public sealed class Plugin
     private void StartSaveThread(
         string threadName,
         Type configRuntimeType,
-        FieldInfo saveThreadField)
+        FieldInfo saveThreadField,
+        CancellationToken stoppingToken)
     {
         // Gets the configs field from the ConfigRuntime type.
 
@@ -156,7 +159,8 @@ public sealed class Plugin
         var saveThreadParameters = new SaveThreadParameters(
             configs: configs,
             saveMethod: saveMethod,
-            configsChangedWatcher: configsChangedWatcher);
+            configsChangedWatcher: configsChangedWatcher,
+            stoppingToken: stoppingToken);
 
         var newThread = new Thread(this.ReplacedSaveThreadMain)
         {
@@ -253,6 +257,7 @@ public sealed class Plugin
 
         var configsChangedWatcher = saveThreadParameters.ConfigsChangedWatcher;
         var chunkSize = saveThreadParameters.ChunkSize;
+        var stoppingToken = saveThreadParameters.StoppingToken;
 
         try
         {
@@ -272,15 +277,15 @@ public sealed class Plugin
 
             // The main loop of the new thread.
             // This loop will be running until the thread is aborted.
-            while (true)
+            while (!stoppingToken.IsCancellationRequested)
             {
                 this.Logger.Debug("A new iteration of config change detection loop is starting.");
-                using var cts = new CancellationTokenSource();
 
                 try
                 {
-                    var configsChanged = configsBag.Count != configWaitHandleMap.Count
-                        || configsBag.Except(configWaitHandleMap.Values).Any();
+                    var configsChanged = configBagChanged(
+                        configWaitHandleMap?.Values ?? Enumerable.Empty<Config>(),
+                        configsBag?.ToArray() ?? Enumerable.Empty<Config>());
 
                     if (configsChanged)
                     {
@@ -303,7 +308,7 @@ public sealed class Plugin
                 {
                     var signaled = configWaitHandleMap
                         .Keys
-                        .WaitAny(chunkSize, cts.Token);
+                        .WaitAny(chunkSize, stoppingToken);
 
                     if (signaled != null && configWaitHandleMap.TryGetValue(signaled, out var config) && config != null)
                     {
@@ -312,7 +317,7 @@ public sealed class Plugin
                             this.Logger.Debug($"Config change detected. Name: {config.Name}");
                             saveThreadParameters.InvokeSave(config);
 
-                            this.Logger.Debug($"Config saved. Name: {config.Name}");
+                            this.Logger.Trace($"Config saved. Name: {config.Name}");
                         }
                         catch (Exception ex)
                         {
@@ -324,30 +329,43 @@ public sealed class Plugin
                         this.Logger.Debug("No config change detected.");
                     }
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex) when (ex.CancellationToken == stoppingToken)
                 {
                     this.Logger.Debug("Operation canceled for the current iteration.");
+                    break;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    this.Logger.Warn(ex, "Operation canceled unexpectedly.");
                     continue;
                 }
-                finally
-                {
-                    cts.Cancel();
-                }
             }
+
+            this.Logger.Info("Gracefully exiting overriding thread.");
         }
         catch (ThreadAbortException ex)
         {
-            this.Logger.Warn($"Thread is being aborted, before cancellation request is handled.");
-            this.Logger.Warn(ex);
+            this.Logger.Warn(ex, $"Thread is being aborted, before cancellation request is handled.");
         }
         catch (Exception ex)
         {
-            this.Logger.Error($"{nameof(ReplacedSaveThreadMain)}() has been unexpectedly stopped.");
-            this.Logger.Error(ex);
+            this.Logger.Error(ex, $"{nameof(ReplacedSaveThreadMain)}() has been unexpectedly stopped.");
         }
-        finally
+
+        static bool configBagChanged(
+            IEnumerable<Config> currentConfigs,
+            IEnumerable<Config> newConfigs)
         {
-            this.Logger.Warn($"Exiting overriding thread. ThreadMainMethod: {nameof(ReplacedSaveThreadMain)}()");
+            return currentConfigs is null
+                ? throw new ArgumentNullException(nameof(currentConfigs))
+                : newConfigs is null
+                    ? throw new ArgumentNullException(nameof(newConfigs))
+                    : currentConfigs.Count() != newConfigs.Count()
+                        || currentConfigs
+                            .Select(x => x?.Name)
+                            .Where(x => x != null)
+                            .Except(newConfigs.Select(x => x?.Name).Where(x => x != null))
+                            .Any();
         }
     }
 
@@ -372,6 +390,11 @@ public sealed class Plugin
         public AutoResetEvent ConfigsChangedWatcher { get; }
 
         /// <summary>
+        /// Gets or sets the cancellation token.
+        /// </summary>
+        public CancellationToken StoppingToken { get; }
+
+        /// <summary>
         /// Gets or sets the chunk size.
         /// </summary>
         public int ChunkSize { get; }
@@ -387,7 +410,8 @@ public sealed class Plugin
             ConcurrentBag<Config> configs,
             MethodInfo saveMethod,
             AutoResetEvent configsChangedWatcher,
-            int chunkSize = 60)
+            int chunkSize = 60,
+            CancellationToken stoppingToken = default)
         {
             this.Configs = configs ?? throw new ArgumentNullException(nameof(configs));
             this.SaveMethod = saveMethod ?? throw new ArgumentNullException(nameof(saveMethod));
@@ -399,6 +423,7 @@ public sealed class Plugin
             }
 
             this.ChunkSize = chunkSize;
+            this.StoppingToken = stoppingToken;
         }
 
         /// <summary>

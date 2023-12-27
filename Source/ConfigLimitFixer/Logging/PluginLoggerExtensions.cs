@@ -314,7 +314,8 @@ public static class PluginLoggerExtensions
     {
         logger.Log(
             logLevel: logLevel,
-            message: string.Format(format, args));
+            message: string.Format(format, args),
+            callerMemberName: null);
     }
 
     /// <summary>
