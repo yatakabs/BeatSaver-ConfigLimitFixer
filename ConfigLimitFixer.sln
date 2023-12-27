@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33516.290
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConfigLimitFixer", "Source\ConfigLimitFixer\ConfigLimitFixer.csproj", "{5DCEC2CB-68C9-49D6-9C0D-3F1E48377513}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{59BC8393-B5A0-4AC0-9605-78284A05CC47}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConfigLimitFixer.Tests", "Source\ConfigLimitFixer.Tests\ConfigLimitFixer.Tests.csproj", "{EB50865C-2A0A-405D-9ED3-732F164BB2F9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5DCEC2CB-68C9-49D6-9C0D-3F1E48377513}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5DCEC2CB-68C9-49D6-9C0D-3F1E48377513}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5DCEC2CB-68C9-49D6-9C0D-3F1E48377513}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5DCEC2CB-68C9-49D6-9C0D-3F1E48377513}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EB50865C-2A0A-405D-9ED3-732F164BB2F9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB50865C-2A0A-405D-9ED3-732F164BB2F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB50865C-2A0A-405D-9ED3-732F164BB2F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB50865C-2A0A-405D-9ED3-732F164BB2F9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {08D53AA0-F21A-4F7D-B1D3-FDF9F3B42883}
+	EndGlobalSection
+EndGlobal
